@@ -3,7 +3,7 @@ use crate::types::MarketStatus;
 use crate::modules::{markets, oracles, voting};
 use crate::errors::ErrorCode;
 
-const DISPUTE_WINDOW_SECONDS: u64 = 86400; // 24 hours
+const DISPUTE_WINDOW_SECONDS: u64 = 259200; // 72 hours
 const VOTING_PERIOD_SECONDS: u64 = 259200; // 72 hours
 const MAJORITY_THRESHOLD_BPS: i128 = 6000; // 60%
 
@@ -27,7 +27,7 @@ pub fn attempt_oracle_resolution(e: &Env, market_id: u64) -> Result<(), ErrorCod
     oracles::validate_oracle_staleness(e, market_id, &market.oracle_config)?;
     
     // Attempt oracle resolution
-    if let Some(oracle_outcome) = oracles::get_oracle_result(e, market_id, &market.oracle_config) {
+    if let Some(oracle_outcome) = oracles::get_oracle_result(e, market_id, 0) {
         let old_status = soroban_sdk::String::from_slice(e, "Active");
         let new_status = soroban_sdk::String::from_slice(e, "PendingResolution");
         

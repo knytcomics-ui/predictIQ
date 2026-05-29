@@ -6,6 +6,7 @@ mod modules;
 mod test;
 pub mod pyth_client;
 pub mod types;
+mod test_pyth_integration;
 
 use crate::errors::ErrorCode;
 use crate::modules::admin;

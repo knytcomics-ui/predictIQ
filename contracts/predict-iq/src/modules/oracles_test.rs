@@ -531,14 +531,41 @@ mod pyth_integration_tests {
     use crate::types::OracleConfig;
 
     /// Minimal mock Pyth contract that returns a fixed price for any feed_id.
+    ///
+    /// Implements both `get_price` and `get_price_no_older_than` so the mock
+    /// satisfies the full [`PythOracleInterface`] and can be used to test the
+    /// staleness-enforced resolution path.
     #[contract]
     pub struct MockPythContract;
 
     #[contractimpl]
     impl MockPythContract {
-        pub fn get_price(_env: Env, _feed_id: BytesN<32>) -> (i64, u64, i32, i64) {
+        /// Return a fixed BTC/USD price regardless of feed_id.
+        pub fn get_price(_env: Env, _feed_id: BytesN<32>) -> crate::pyth_client::Price {
             // BTC/USD: $50,000.00 with 2% confidence, expo -2, recent timestamp
-            (5_000_000i64, 100_000u64, -2i32, 1_700_000_000i64)
+            crate::pyth_client::Price {
+                price: 5_000_000i64,
+                conf: 100_000u64,
+                expo: -2i32,
+                publish_time: 1_700_000_000i64,
+            }
+        }
+
+        /// Return the same fixed price but panic if the price would be stale.
+        /// In production the Pyth contract enforces this; here we simulate it.
+        pub fn get_price_no_older_than(
+            env: Env,
+            feed_id: BytesN<32>,
+            age_seconds: u64,
+        ) -> crate::pyth_client::Price {
+            let price = Self::get_price(env.clone(), feed_id);
+            let current = env.ledger().timestamp();
+            let publish = price.publish_time as u64;
+            let age = current.saturating_sub(publish);
+            if age > age_seconds {
+                panic!("MockPythContract: price is stale");
+            }
+            price
         }
     }
 

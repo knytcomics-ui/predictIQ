@@ -32,6 +32,7 @@ interface RequestOptions {
   params?: Record<string, string | number | undefined>;
   cacheTtl?: number;
   maxRetries?: number;
+  signal?: AbortSignal;
 }
 
 interface RetryConfig {
@@ -199,6 +200,7 @@ async function request<T>(
         method,
         headers: { "Content-Type": "application/json" },
         body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+        signal: options.signal,
       });
 
       if (!res.ok) {
@@ -264,12 +266,12 @@ async function request<T>(
 // ---------------------------------------------------------------------------
 
 export const api = {
-  health: () => request<string>("GET", "/health"),
+  health: (signal?: AbortSignal) => request<string>("GET", "/health", { signal }),
 
-  getStatistics: () => 
-    request<Record<string, unknown>>("GET", "/api/statistics", { cacheTtl: CACHE_TTL.MEDIUM }),
+  getStatistics: (signal?: AbortSignal) => 
+    request<Record<string, unknown>>("GET", "/api/statistics", { cacheTtl: CACHE_TTL.MEDIUM, signal }),
 
-  getFeaturedMarkets: () =>
+  getFeaturedMarkets: (signal?: AbortSignal) =>
     request<
       Array<{
         id: number;
@@ -279,73 +281,76 @@ export const api = {
         onchain_volume: string;
         resolved_outcome?: number | null;
       }>
-    >("GET", "/api/markets/featured", { cacheTtl: CACHE_TTL.SHORT }),
+    >("GET", "/api/markets/featured", { cacheTtl: CACHE_TTL.SHORT, signal }),
 
-  getContent: (params?: { page?: number; page_size?: number }) =>
-    request<Record<string, unknown>>("GET", "/api/content", { params, cacheTtl: CACHE_TTL.MEDIUM }),
+  getContent: (params?: { page?: number; page_size?: number }, signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", "/api/content", { params, cacheTtl: CACHE_TTL.MEDIUM, signal }),
 
   // Blockchain
-  getBlockchainHealth: () =>
-    request<Record<string, unknown>>("GET", "/api/blockchain/health", { cacheTtl: CACHE_TTL.SHORT }),
+  getBlockchainHealth: (signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", "/api/blockchain/health", { cacheTtl: CACHE_TTL.SHORT, signal }),
 
-  getBlockchainMarket: (marketId: number | string) =>
-    request<Record<string, unknown>>("GET", `/api/blockchain/markets/${marketId}`, { cacheTtl: CACHE_TTL.MEDIUM }),
+  getBlockchainMarket: (marketId: number | string, signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", `/api/blockchain/markets/${marketId}`, { cacheTtl: CACHE_TTL.MEDIUM, signal }),
 
-  getBlockchainStats: () =>
-    request<Record<string, unknown>>("GET", "/api/blockchain/stats", { cacheTtl: CACHE_TTL.MEDIUM }),
+  getBlockchainStats: (signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", "/api/blockchain/stats", { cacheTtl: CACHE_TTL.MEDIUM, signal }),
 
-  getUserBets: (user: string, params?: { page?: number; page_size?: number }) =>
-    request<Record<string, unknown>>("GET", `/api/blockchain/users/${user}/bets`, { params, cacheTtl: CACHE_TTL.MEDIUM }),
+  getUserBets: (user: string, params?: { page?: number; page_size?: number }, signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", `/api/blockchain/users/${user}/bets`, { params, cacheTtl: CACHE_TTL.MEDIUM, signal }),
 
-  getOracleResult: (marketId: number | string) =>
-    request<Record<string, unknown>>("GET", `/api/blockchain/oracle/${marketId}`, { cacheTtl: CACHE_TTL.LONG }),
+  getOracleResult: (marketId: number | string, signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", `/api/blockchain/oracle/${marketId}`, { cacheTtl: CACHE_TTL.LONG, signal }),
 
-  getTransactionStatus: (txHash: string) =>
-    request<Record<string, unknown>>("GET", `/api/blockchain/tx/${txHash}`, { cacheTtl: CACHE_TTL.LONG }),
+  getTransactionStatus: (txHash: string, signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", `/api/blockchain/tx/${txHash}`, { cacheTtl: CACHE_TTL.LONG, signal }),
 
   // Newsletter
-  newsletterSubscribe: (body: { email: string; source?: string }) =>
-    request<{ success: boolean; message: string }>("POST", "/api/v1/newsletter/subscribe", { body }),
+  newsletterSubscribe: (body: { email: string; source?: string }, signal?: AbortSignal) =>
+    request<{ success: boolean; message: string }>("POST", "/api/v1/newsletter/subscribe", { body, signal }),
 
-  newsletterConfirm: (token: string) =>
+  newsletterConfirm: (token: string, signal?: AbortSignal) =>
     request<{ success: boolean; message: string }>("GET", `/api/v1/newsletter/confirm`, {
       params: { token },
+      signal,
     }),
 
-  newsletterUnsubscribe: (email: string) =>
+  newsletterUnsubscribe: (email: string, signal?: AbortSignal) =>
     request<{ success: boolean; message: string }>("DELETE", "/api/v1/newsletter/unsubscribe", {
       body: { email },
+      signal,
     }),
 
-  newsletterGdprExport: (email: string) =>
+  newsletterGdprExport: (email: string, signal?: AbortSignal) =>
     request<{ success: boolean; data: Record<string, unknown> }>(
       "GET",
       "/api/v1/newsletter/gdpr/export",
-      { params: { email } }
+      { params: { email }, signal }
     ),
 
-  newsletterGdprDelete: (email: string) =>
+  newsletterGdprDelete: (email: string, signal?: AbortSignal) =>
     request<{ success: boolean; message: string }>("DELETE", "/api/v1/newsletter/gdpr/delete", {
       body: { email },
+      signal,
     }),
 
   // Admin / email
-  resolveMarket: (marketId: number | string) =>
-    request<{ invalidated_keys: number }>("POST", `/api/markets/${marketId}/resolve`),
+  resolveMarket: (marketId: number | string, signal?: AbortSignal) =>
+    request<{ invalidated_keys: number }>("POST", `/api/markets/${marketId}/resolve`, { signal }),
 
-  emailPreview: (templateName: string) =>
-    request<Record<string, unknown>>("GET", `/api/v1/email/preview/${templateName}`, { cacheTtl: CACHE_TTL.LONG }),
+  emailPreview: (templateName: string, signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", `/api/v1/email/preview/${templateName}`, { cacheTtl: CACHE_TTL.LONG, signal }),
 
-  emailSendTest: (body: { recipient: string; template_name: string }) =>
+  emailSendTest: (body: { recipient: string; template_name: string }, signal?: AbortSignal) =>
     request<{ success: boolean; message: string; message_id: string }>(
       "POST",
       "/api/v1/email/test",
-      { body }
+      { body, signal }
     ),
 
-  getEmailAnalytics: (params?: { template_name?: string; days?: number }) =>
-    request<Record<string, unknown>>("GET", "/api/v1/email/analytics", { params, cacheTtl: CACHE_TTL.MEDIUM }),
+  getEmailAnalytics: (params?: { template_name?: string; days?: number }, signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", "/api/v1/email/analytics", { params, cacheTtl: CACHE_TTL.MEDIUM, signal }),
 
-  getEmailQueueStats: () =>
-    request<Record<string, unknown>>("GET", "/api/v1/email/queue/stats", { cacheTtl: CACHE_TTL.SHORT }),
+  getEmailQueueStats: (signal?: AbortSignal) =>
+    request<Record<string, unknown>>("GET", "/api/v1/email/queue/stats", { cacheTtl: CACHE_TTL.SHORT, signal }),
 };

@@ -84,8 +84,17 @@ impl IntoResponse for ApiError {
 
 fn into_api_error(err: anyhow::Error) -> ApiError {
     if let Some(db_err) = err.downcast_ref::<DbError>() {
-        if matches!(db_err, DbError::Timeout) {
-            return ApiError::service_unavailable("database query timed out");
+        match db_err {
+            DbError::Timeout => {
+                return ApiError::service_unavailable("database query timed out");
+            }
+            DbError::PoolExhausted => {
+                return ApiError::service_unavailable("database connection pool exhausted");
+            }
+            DbError::ConstraintViolation(msg) => {
+                return ApiError::conflict(msg.clone());
+            }
+            DbError::Other(_) => {}
         }
     }
     ApiError::internal(err)

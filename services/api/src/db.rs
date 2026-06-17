@@ -14,7 +14,14 @@ use crate::{
 /// Errors that can be returned by [`Database`] methods.
 #[derive(Debug)]
 pub enum DbError {
+    /// A query exceeded the per-operation timeout.
     Timeout,
+    /// The connection pool had no connections available within the acquire timeout.
+    PoolExhausted,
+    /// A database constraint was violated (unique, foreign-key, not-null, check).
+    /// The inner string is the database error message for logging.
+    ConstraintViolation(String),
+    /// Any other database error.
     Other(anyhow::Error),
 }
 
@@ -22,6 +29,10 @@ impl std::fmt::Display for DbError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DbError::Timeout => write!(f, "database query timed out"),
+            DbError::PoolExhausted => write!(f, "database connection pool exhausted"),
+            DbError::ConstraintViolation(msg) => {
+                write!(f, "database constraint violation: {msg}")
+            }
             DbError::Other(e) => write!(f, "{e}"),
         }
     }
@@ -31,7 +42,19 @@ impl std::error::Error for DbError {}
 
 impl From<sqlx::Error> for DbError {
     fn from(e: sqlx::Error) -> Self {
-        DbError::Other(anyhow::Error::from(e))
+        match &e {
+            sqlx::Error::PoolTimedOut => DbError::PoolExhausted,
+            sqlx::Error::Database(db_err) => {
+                // PostgreSQL constraint violation SQLSTATE codes start with "23"
+                // (23000 integrity constraint, 23505 unique violation, etc.).
+                if db_err.code().map(|c| c.starts_with("23")).unwrap_or(false) {
+                    DbError::ConstraintViolation(db_err.message().to_string())
+                } else {
+                    DbError::Other(anyhow::Error::from(e))
+                }
+            }
+            _ => DbError::Other(anyhow::Error::from(e)),
+        }
     }
 }
 

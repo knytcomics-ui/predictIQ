@@ -53,10 +53,17 @@ impl IpRateLimiter {
     /// Uses an atomic Redis Lua script so the counter is consistent across
     /// all instances. Fails open (returns `true`) if Redis is unavailable.
     pub async fn allow(&self, key: &str, max_requests: usize, window: Duration) -> bool {
-        let redis_key = format!("newsletter:ratelimit:{key}");
+        let redis_key = format!("newsletter:ratelimit:v1:{key}");
         match self.cache.incr_with_ttl(&redis_key, window).await {
             Ok(count) => count as usize <= max_requests,
-            Err(_) => true, // fail open if Redis is unavailable
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    key,
+                    "newsletter rate limiter Redis error; failing open to avoid blocking subscribers"
+                );
+                true
+            }
         }
     }
 }
@@ -121,7 +128,7 @@ impl TokenStore {
             return ConfirmResult::InvalidOrExpired;
         };
 
-        let entry = self.pending.remove(&email).unwrap();
+        let entry = self.pending.remove(&email).expect("email was found in pending map immediately above");
 
         if Instant::now() > entry.expires_at {
             return ConfirmResult::InvalidOrExpired;
@@ -174,7 +181,10 @@ pub async fn send_confirmation_email(
 
     if !response.status().is_success() {
         let status = response.status();
-        let body = response.text().await.unwrap_or_default();
+        let body = response.text().await.unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "failed to read SendGrid error response body");
+            String::new()
+        });
         anyhow::bail!("sendgrid returned {status}: {body}");
     }
 

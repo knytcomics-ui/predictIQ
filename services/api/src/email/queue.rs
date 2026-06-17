@@ -536,6 +536,12 @@ pub struct QueueStats {
 mod tests {
     use super::*;
 
+    #[test]
+    fn dead_letter_requeue_delay_is_positive() {
+        assert!(EmailQueue::DEAD_LETTER_REQUEUE_DELAY_SECS > 0,
+            "cooling-off delay must be positive to prevent immediate re-failure loops");
+    }
+
     /// Test that recover_orphaned_jobs correctly identifies stale jobs.
     /// 
     /// Acceptance criteria for #472: 

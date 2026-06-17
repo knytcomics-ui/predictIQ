@@ -480,7 +480,13 @@ pub async fn sendgrid_webhook_middleware(
             .and_then(|h| h.to_str().ok())
             .unwrap_or("");
 
-        // Replay protection: reject stale timestamps (> config.replay_window_secs)
+        // Replay protection: reject stale AND future-dated timestamps.
+        //
+        // The previous check used .abs() which accepted future-dated timestamps
+        // within the replay window. An attacker could pre-sign a request with
+        // timestamp = now + window - 1 and replay it for up to 2 * window seconds.
+        // The fix rejects any timestamp that is in the future at all, and any that
+        // is more than replay_window_secs old.
         let ts_str = headers
             .get("x-twilio-email-event-webhook-timestamp")
             .and_then(|h| h.to_str().ok())
@@ -490,7 +496,14 @@ pub async fn sendgrid_webhook_middleware(
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
-        if (now - ts).abs() > config.replay_window_secs as i64 {
+        let age_secs = now - ts;
+        if age_secs < 0 || age_secs > config.replay_window_secs as i64 {
+            tracing::warn!(
+                ts,
+                now,
+                age_secs,
+                "sendgrid webhook rejected: timestamp out of bounds"
+            );
             return Err(StatusCode::UNAUTHORIZED);
         }
 

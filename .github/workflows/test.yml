@@ -845,6 +845,85 @@ jobs:
           path: frontend/coverage/
           retention-days: 14
 
+  # ── #742: schema drift detection ─────────────────────────────────────────────
+  schema-drift-check:
+    name: Schema Drift Detection
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: predictiq_schema_check
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGHOST: localhost
+      PGDATABASE: predictiq_schema_check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply all migrations
+        run: |
+          for f in $(ls services/api/database/migrations/*.sql | sort); do
+            echo "▶ $f"
+            psql -f "$f" || { echo "❌ Migration failed: $f"; exit 1; }
+          done
+
+      - name: Dump live schema
+        run: |
+          pg_dump \
+            --schema-only \
+            --no-owner \
+            --no-privileges \
+            --no-comments \
+            --schema=public \
+            > /tmp/live-schema.sql
+
+      - name: Normalise both dumps for comparison
+        run: |
+          # Strip pg_dump header lines (SET …, SELECT …) that are not structural.
+          normalize() {
+            grep -vE '^(SET |SELECT |--|$)' "$1" \
+              | sed 's/ *$//; s/\t/ /g' \
+              | sort
+          }
+          normalize /tmp/live-schema.sql > /tmp/live-normalized.sql
+          normalize services/api/database/schema.sql > /tmp/snap-normalized.sql
+
+      - name: Compare against committed snapshot
+        run: |
+          if ! diff -u /tmp/snap-normalized.sql /tmp/live-normalized.sql; then
+            echo ""
+            echo "❌ Schema drift detected!"
+            echo "   The live schema (after running all migrations) differs from"
+            echo "   services/api/database/schema.sql."
+            echo ""
+            echo "   To update the snapshot:"
+            echo "     pg_dump --schema-only --no-owner --no-privileges --no-comments \\"
+            echo "       --schema=public <db> > services/api/database/schema.sql"
+            echo "     git add services/api/database/schema.sql"
+            echo "     git commit -m 'chore: update schema snapshot'"
+            exit 1
+          fi
+          echo "✅ Schema matches snapshot — no drift detected."
+
+      - name: Upload live schema dump
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-schema-dump
+          path: /tmp/live-schema.sql
+          retention-days: 7
+
   all-tests-passed:
     name: All Tests Passed
     needs:
@@ -869,6 +948,7 @@ jobs:
       - validate-migration-rollbacks
       - api-criterion-benchmarks
       - frontend-unit-coverage
+      - schema-drift-check
     runs-on: ubuntu-latest
     steps:
       - name: Success

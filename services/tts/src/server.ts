@@ -59,6 +59,10 @@ const config: TTSConfig = {
     ttlMs: parseInt(process.env.TTS_CACHE_TTL_MS || "86400000", 10),
     maxEntries: parseInt(process.env.TTS_CACHE_MAX_ENTRIES || "1000", 10),
   },
+  retry: {
+    maxRetries: parseInt(process.env.TTS_MAX_RETRIES || "3", 10),
+    maxDelayMs: parseInt(process.env.TTS_MAX_DELAY_MS || "60000", 10),
+  },
 };
 
 // ---------------------------------------------------------------------------

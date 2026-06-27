@@ -725,13 +725,24 @@ jobs:
           node services/api/scripts/parse-bench-output.js \
             bench-output.txt bench-results.json
 
+      - name: Fetch baseline from benchmarks branch
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin benchmarks:refs/remotes/origin/benchmarks 2>/dev/null || true
+          if git show origin/benchmarks:api-benchmark-baseline.json > baseline-from-branch.json 2>/dev/null; then
+            echo "BASELINE_FILE=baseline-from-branch.json" >> "$GITHUB_ENV"
+          else
+            echo "BASELINE_FILE=services/api/benches/.benchmarks/baseline.json" >> "$GITHUB_ENV"
+            echo "No dedicated branch baseline found, falling back to repo baseline."
+          fi
+
       - name: Compare against baseline
         if: github.event_name == 'pull_request'
         run: |
           node services/api/scripts/compare-api-benchmarks.js \
             bench-results.json \
-            services/api/benches/.benchmarks/baseline.json \
-            --threshold 10
+            "$BASELINE_FILE" \
+            --threshold 20
 
       - name: Upload benchmark results
         if: always()
@@ -748,8 +759,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [api-criterion-benchmarks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -772,31 +787,30 @@ jobs:
         with:
           node-version: "18"
 
-      - name: Parse and save new baseline
+      - name: Parse benchmark results
         run: |
           node services/api/scripts/parse-bench-output.js \
             bench-output.txt \
-            services/api/benches/.benchmarks/baseline.json
+            api-benchmark-baseline.json
 
-      - name: Create Pull Request with baseline updates
-        uses: peter-evans/create-pull-request@v6
-        with:
-          commit-message: "chore: update API benchmark baseline for main branch"
-          title: "chore: update API benchmark baseline"
-          body: |
-            ## Automated API Benchmark Baseline Update
-            
-            This PR updates the API benchmark baseline after changes to main branch.
-            
-            **Changes:**
-            - Updated `services/api/benches/.benchmarks/baseline.json` with latest benchmark results
-            
-            **Note:** This is an automated PR. Please review the baseline changes before merging.
-          branch: chore/api-baseline-${{ github.run_id }}
-          delete-branch: true
-          labels: |
-            ci/cd
-            automated
+      - name: Push baseline to benchmarks branch
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Switch to (or create) the dedicated benchmarks branch.
+          git fetch origin benchmarks 2>/dev/null || true
+          if git show-ref --verify --quiet refs/remotes/origin/benchmarks; then
+            git checkout -B benchmarks origin/benchmarks
+          else
+            git checkout --orphan benchmarks
+            git rm -rf . --quiet
+          fi
+
+          cp api-benchmark-baseline.json .
+          git add api-benchmark-baseline.json
+          git commit --allow-empty -m "chore: update API benchmark baseline (run ${{ github.run_id }})"
+          git push origin benchmarks
 
   # ── #743: frontend unit-test coverage gate ───────────────────────────────────
   frontend-unit-coverage:

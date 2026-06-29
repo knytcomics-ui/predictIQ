@@ -21,10 +21,6 @@ if (!envResult.success) {
   throw new Error(`\nMissing or invalid environment variables:\n${issues}\n`);
 }
 
-const withBundleAnalyzer = require('@next/bundle-analyzer')({
-  enabled: process.env.ANALYZE === 'true',
-});
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Enable code splitting and optimization
@@ -108,4 +104,4 @@ const nextConfig = {
   },
 };
 
-module.exports = withBundleAnalyzer(nextConfig);
+module.exports = nextConfig;

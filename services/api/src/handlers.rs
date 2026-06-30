@@ -92,7 +92,8 @@ fn into_api_error(err: anyhow::Error) -> ApiError {
                 return ApiError::service_unavailable("database connection pool exhausted");
             }
             DbError::ConstraintViolation(msg) => {
-                return ApiError::conflict(msg.clone());
+                tracing::error!(db_constraint = %msg, "database constraint violation");
+                return ApiError::conflict("A record with this value already exists.");
             }
             DbError::Other(_) => {}
         }

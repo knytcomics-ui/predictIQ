@@ -99,9 +99,11 @@ output "sg_id" {
 }
 
 output "endpoint" {
-  value = aws_elasticache_cluster.main.cache_nodes[0].address
+  value     = aws_elasticache_cluster.main.cache_nodes[0].address
+  sensitive = true
 }
 
 output "redis_url" {
-  value = "redis://${aws_elasticache_cluster.main.cache_nodes[0].address}:6379"
+  value     = "redis://${aws_elasticache_cluster.main.cache_nodes[0].address}:6379"
+  sensitive = true
 }

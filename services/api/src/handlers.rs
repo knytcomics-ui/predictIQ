@@ -164,6 +164,16 @@ pub async fn health(State(state): State<Arc<AppState>>, headers: HeaderMap) -> i
         health_status["workers"]["email_queue_processing"] = processing_count.into();
     }
 
+    let sendgrid_status = match state.email_service.probe_sendgrid().await {
+        Ok(()) => "ok",
+        Err(e) => {
+            tracing::warn!(error = %e, "SendGrid connectivity probe failed");
+            health_status["status"] = "degraded".into();
+            "degraded"
+        }
+    };
+    health_status["sendgrid"] = serde_json::json!({ "status": sendgrid_status });
+
     (StatusCode::OK, Json(health_status))
 }
 
